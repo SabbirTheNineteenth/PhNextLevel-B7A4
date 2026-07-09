@@ -1,0 +1,167 @@
+// RentNest - Prisma Schema
+// Datasource: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------- ENUMS -------------------
+
+enum Role {
+  TENANT
+  LANDLORD
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+}
+
+enum RentalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ACTIVE
+  COMPLETED
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum PaymentProvider {
+  STRIPE
+  SSLCOMMERZ
+}
+
+// ------------------- MODELS -------------------
+
+model User {
+  id        String     @id @default(uuid())
+  name      String
+  email     String     @unique
+  password  String
+  phone     String?
+  role      Role       @default(TENANT)
+  status    UserStatus @default(ACTIVE)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relations
+  properties     Property[]      // properties owned (landlord)
+  rentalRequests RentalRequest[] // requests made (tenant)
+  reviews        Review[]        // reviews written (tenant)
+  payments       Payment[]       // payments made (tenant)
+
+  @@map("users")
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  properties Property[]
+
+  @@map("categories")
+}
+
+model Property {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  location    String
+  price       Int // monthly rent
+  bedrooms    Int      @default(1)
+  bathrooms   Int      @default(1)
+  amenities   String[] @default([])
+  images      String[] @default([])
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  landlordId String
+  landlord   User   @relation(fields: [landlordId], references: [id], onDelete: Cascade)
+
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id])
+
+  rentalRequests RentalRequest[]
+  reviews        Review[]
+
+  @@map("properties")
+}
+
+model RentalRequest {
+  id         String       @id @default(uuid())
+  status     RentalStatus @default(PENDING)
+  message    String?
+  moveInDate DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  // Relations
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   User   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  payment Payment?
+  review  Review?
+
+  @@map("rental_requests")
+}
+
+model Payment {
+  id                    String          @id @default(uuid())
+  transactionId         String          @unique
+  amount                Int
+  method                String          @default("card")
+  provider              PaymentProvider @default(STRIPE)
+  status                PaymentStatus   @default(PENDING)
+  stripePaymentIntentId String?
+  paidAt                DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  // Relations
+  rentalRequestId String        @unique
+  rentalRequest   RentalRequest @relation(fields: [rentalRequestId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   User   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  rating    Int // 1..5
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  propertyId String
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  tenantId String
+  tenant   User   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  rentalRequestId String        @unique
+  rentalRequest   RentalRequest @relation(fields: [rentalRequestId], references: [id], onDelete: Cascade)
+
+  @@map("reviews")
+}
